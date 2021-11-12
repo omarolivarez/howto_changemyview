@@ -1,0 +1,163 @@
+---
+title: "01 How To changemyview"
+output: pdf_document
+---
+
+Steps to run before this
+1. Download Google Sheet
+2. Run through LIWC and save as xlsx
+3. Clean up first 3 col names
+4. Make sure file keeps same name (liwc_results_changemyview.xlsx) and filepath. 
+
+Then you can start from here
+
+```{r}
+# READ IN LIBRARIES
+library(data.table)
+library(readr)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+library(stringr) # used to replace strings " of "
+library(ggpubr) # used to stitch multiple graphs together
+library(readxl) # to read in excel
+library(corrplot) # to draw correlogram
+library(corrr) # to focus correlation specifically on changedview
+library(lmtest) # for likelihood test for glm
+```
+
+
+```{r}
+df_file_path <- "/Users/OmarOlivarez/Desktop/workspaces/howto_changemyview/data/liwc_results_changemyview.xlsx"
+
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+# and read in main, LIWCed data
+df <- read_excel(df_file_path)
+
+View(df)
+head(df)
+```
+
+Need to convert changedview from character to numeric in order to use correlations and other calculations. 
+```{r}
+df$changedview <- as.numeric(df$changedview)
+```
+
+
+Let's select only relevant vars and see their correlation coefficient
+```{r}
+mini_df <- df %>%
+  select(-c(area, text, WC))
+
+corr_df <- mini_df %>% correlate() %>% focus(changedview) 
+
+corr_df <- corr_df %>% 
+  arrange(desc(corr_df$changedview))
+View(corr_df)
+```
+
+Words highly positively correlated with changing view (above 0.2 corr):
+cause
+focuspresent
+work
+Sixltr
+interrog
+power
+
+Words highly negatively correlated with changing view (below -0.2 corr):
+number
+friend
+filler
+shehe
+assent
+focusfuture
+focuspast
+relig
+female
+negemo
+tentat
+affect
+
+## More robust analyses
+Let's visualize the distribution of the two variables at the extremes
+```{r}
+ggplot(df, aes(x = cause, y = changedview)) +
+  geom_point() + 
+  theme(panel.background = element_rect(fill = "white", colour= "black")) +
+  theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
+
+ggplot(df, aes(x = number, y = changedview)) +
+  geom_point() + 
+  theme(panel.background = element_rect(fill = "white", colour= "black")) +
+  theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
+```
+
+Now let's run a logistic regression using the above variables
+
+```{r}
+logit_view1 <- glm(changedview ~ cause, data = df)
+summary(logit_view1)
+
+logit_view2 <- glm(changedview ~ cause + focusfuture, data = df)
+summary(logit_view2)
+
+logit_view4 <- glm(changedview ~ number +
+                     focuspresent + friend + work + 
+                     focusfuture, data = df)
+
+summary(logit_view4)
+```
+
+Let's run a likelihood ratio test on model3 vs model1
+```{r}
+lrtest(logit_view1, logit_view4)
+
+```
+
+
+
+
+```{r}
+ggplot(df, aes(x=cause, y= changedview)) + 
+  geom_point(alpha=.5) +
+  stat_smooth(method="glm", fullrange=TRUE, 
+              method.args = list(family=binomial)) 
+```
+
+
+
+
+
+
+```{r}
+```
+
+
+
+
+```{r}
+```
+
+
+
+
+```{r}
+```
+
+
+
+
+
+
+```{r}
+```
+
+
+
+
+
+```{r}
+```
