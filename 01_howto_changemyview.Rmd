@@ -104,9 +104,8 @@ summary(logit_view1)
 logit_view2 <- glm(changedview ~ cause + focusfuture, data = df)
 summary(logit_view2)
 
-logit_view4 <- glm(changedview ~ number +
-                     focuspresent + friend + work + 
-                     focusfuture, data = df)
+logit_view4 <- glm(changedview ~ focuspresent  + 
+                     focusfuture + ingest + they, data = df)
 
 summary(logit_view4)
 ```
