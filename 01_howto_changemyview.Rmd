@@ -61,25 +61,21 @@ View(corr_df)
 
 Words highly positively correlated with changing view (above 0.2 corr):
 cause
-focuspresent
 work
-Sixltr
-interrog
-power
+*conj
+*focuspresent
+*work
+*Sixltr
+*interrog
+*power
 
 Words highly negatively correlated with changing view (below -0.2 corr):
 number
-friend
-filler
-shehe
-assent
-focusfuture
-focuspast
-relig
-female
+ingest
+leisure
 negemo
-tentat
-affect
+certain
+time
 
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
@@ -101,11 +97,13 @@ Now let's run a logistic regression using the above variables
 logit_view1 <- glm(changedview ~ cause, data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ cause + focusfuture, data = df)
+logit_view2 <- glm(changedview ~ cause + number, data = df)
 summary(logit_view2)
 
-logit_view4 <- glm(changedview ~ focuspresent  + 
-                     focusfuture + ingest + they, data = df)
+logit_view4 <- glm(changedview ~ cause +
+                     number + ingest + negemo, 
+                   family = binomial, 
+                   data = df)
 
 summary(logit_view4)
 ```
@@ -129,10 +127,36 @@ ggplot(df, aes(x=cause, y= changedview)) +
 
 
 
-
+Just playing around a bit:
 
 ```{r}
+set.seed(222)
+test_obs              <- round(0.1 * nrow(df))
+train_obs             <- nrow(df) - test_obs
+test_train_vec        <- c(rep("test", test_obs),
+                           rep("train", train_obs))
+
+test_train_vec        <- sample(test_train_vec, nrow(df), replace = FALSE)
+test_data             <- df[which(test_train_vec == "test"),]
+train_data            <- df[which(test_train_vec == "train"),]
+
+# create the model
+glm_model      <- glm(changedview ~ cause +
+                     number + ingest + negemo,
+                     family = binomial,
+                     data = train_data)
+
+# make the predictions
+logistic_predict      <- predict(glm_model,
+                                 test_data,
+                                 type = "response")
+
+# show the results
+head(logistic_predict, 20)
+head(test_data$changedview, 20)
+
 ```
+67% accuracy
 
 
 
