@@ -26,6 +26,8 @@ library(readxl) # to read in excel
 library(corrplot) # to draw correlogram
 library(corrr) # to focus correlation specifically on changedview
 library(lmtest) # for likelihood test for glm
+library(randomForest)
+library (gbm)
 ```
 
 
@@ -37,8 +39,8 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 # and read in main, LIWCed data
 df <- read_excel(df_file_path)
 
-View(df)
-head(df)
+View(head(df, 30))
+#head(df)
 ```
 
 Need to convert changedview from character to numeric in order to use correlations and other calculations. 
@@ -60,33 +62,29 @@ View(corr_df)
 ```
 
 Words highly positively correlated with changing view (above 0.2 corr):
-cause
+Sixltr
 work
-*conj
-*focuspresent
-*work
-*Sixltr
-*interrog
-*power
+WPS
+cause
+compare
+Parenth
 
 Words highly negatively correlated with changing view (below -0.2 corr):
-number
 ingest
-leisure
-negemo
-certain
-time
+QMark
+social
+Clout
 
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
-ggplot(df, aes(x = cause, y = changedview)) +
-  geom_point() + 
+ggplot(df, aes(x = work, y = changedview)) +
+  geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 
-ggplot(df, aes(x = number, y = changedview)) +
-  geom_point() + 
+ggplot(df, aes(x = ingest, y = changedview)) +
+  geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 ```
@@ -94,19 +92,42 @@ ggplot(df, aes(x = number, y = changedview)) +
 Now let's run a logistic regression using the above variables
 
 ```{r}
-logit_view1 <- glm(changedview ~ cause, data = df)
+logit_view1 <- glm(changedview ~ ingest, family = binomial,
+                   data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ cause + number, data = df)
+logit_view2 <- glm(changedview ~ ingest + Sixltr, 
+                   family = binomial,
+                   data = df)
 summary(logit_view2)
 
-logit_view4 <- glm(changedview ~ cause +
-                     number + ingest + negemo, 
-                   family = binomial, 
+logit_view4 <- glm(changedview ~ Sixltr + work + WPS + cause + compare + ingest, 
+                   family=binomial,
                    data = df)
 
 summary(logit_view4)
 ```
+
+Use this section to compare models to decide which vars to use
+
+```{r}
+
+glm1 <- glm(changedview ~ Sixltr + work + WPS + cause + compare +
+              ingest, 
+            family = binomial, 
+            data = df)
+summary(glm1)
+
+glm2 <- glm(changedview ~ Sixltr + work + WPS + cause + compare + 
+              ingest + friend,
+            family = binomial,
+            data = df)
+#summary(logit_view2)
+
+lrtest(glm1, glm2)
+```
+
+
 
 Let's run a likelihood ratio test on model3 vs model1
 ```{r}
@@ -118,20 +139,18 @@ lrtest(logit_view1, logit_view4)
 
 
 ```{r}
-ggplot(df, aes(x=cause, y= changedview)) + 
+ggplot(df, aes(x=Sixltr, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
 ```
 
 
-
-
 Just playing around a bit:
 
 ```{r}
 set.seed(222)
-test_obs              <- round(0.1 * nrow(df))
+test_obs              <- round(0.06 * nrow(df))
 train_obs             <- nrow(df) - test_obs
 test_train_vec        <- c(rep("test", test_obs),
                            rep("train", train_obs))
@@ -139,10 +158,10 @@ test_train_vec        <- c(rep("test", test_obs),
 test_train_vec        <- sample(test_train_vec, nrow(df), replace = FALSE)
 test_data             <- df[which(test_train_vec == "test"),]
 train_data            <- df[which(test_train_vec == "train"),]
+train_data <- train_data %>% select(-c(text, area))
 
 # create the model
-glm_model      <- glm(changedview ~ cause +
-                     number + ingest + negemo,
+glm_model      <- glm(changedview ~ Sixltr + work + WPS + cause + compare + ingest,
                      family = binomial,
                      data = train_data)
 
@@ -152,22 +171,51 @@ logistic_predict      <- predict(glm_model,
                                  type = "response")
 
 # show the results
-head(logistic_predict, 20)
-head(test_data$changedview, 20)
-
+class_predictions     <- as.numeric(logistic_predict > 0.5)
+logistic_accuracy     <- mean(class_predictions == test_data$changedview)
+print(logistic_accuracy)
 ```
-67% accuracy
+Accuracy^
 
 
 
+
+
+
+
+Playing around with random forests
+```{r}
+set.seed(222)
+high_sales          <- as.factor(df$changedview)
+carseat_data        <- data.frame(df, high_sales)
+carseat_data = carseat_data[, -1]
+train               <- sample(seq(nrow(carseat_data)),
+                              round(nrow(carseat_data) * 0.85))
+train               <- sort(train)
+test                <- which(!(seq(nrow(carseat_data)) %in% train))
+carseats_tree       <- tree(high_sales ~., 
+                            data = carseat_data[train,])
+
+plot(carseats_tree)
+text(carseats_tree, pretty = 0)
+carseats_tree
+```
+
+Now let's get the error info:
 
 ```{r}
-```
-
-
-
-
-```{r}
+error_rate_func   <- function(predictions, true_vals) {
+  error_rate      <- mean(as.numeric(predictions != true_vals))
+  return(error_rate)
+}
+print("~")
+deep_tree_preds   <- predict(carseats_tree,
+                             carseat_data[test, ],
+                             type = "class")
+print("ERROR RATE IS:")
+error_rate_func(deep_tree_preds, carseat_data[test,"high_sales"])
+print("~")
+summary(carseats_tree)
 ```
 
 
