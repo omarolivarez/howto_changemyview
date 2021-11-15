@@ -32,7 +32,7 @@ library(lmtest) # for likelihood test for glm
 
 
 ```{r}
-df_file_path <- "/Users/OmarOlivarez/Desktop/workspaces/howto_changemyview/data/liwc_results_changemyview.xlsx"
+df_file_path <- "/Users/oolivarez/Desktop/workspaces/howto_changemyview/data/liwc_results_changemyview.xlsx"
 
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
@@ -191,6 +191,7 @@ Accuracy^
 
 Playing around with random forests
 ```{r}
+library(tree)
 set.seed(222)
 high_sales          <- as.factor(df$changedview)
 carseat_data        <- data.frame(df, high_sales)
