@@ -26,8 +26,8 @@ library(readxl) # to read in excel
 library(corrplot) # to draw correlogram
 library(corrr) # to focus correlation specifically on changedview
 library(lmtest) # for likelihood test for glm
-library(randomForest)
-library (gbm)
+#library(randomForest)
+#library (gbm)
 ```
 
 
@@ -61,29 +61,24 @@ corr_df <- corr_df %>%
 View(corr_df)
 ```
 
-Words highly positively correlated with changing view (above 0.2 corr):
-Sixltr
-work
-WPS
-cause
+Words highly positively correlated with changing view (above 0.1 corr):
 compare
-Parenth
+WPS (is close)
 
 Words highly negatively correlated with changing view (below -0.2 corr):
-ingest
 QMark
-social
-Clout
+ingest
+certain (is close)
 
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
-ggplot(df, aes(x = work, y = changedview)) +
+ggplot(df, aes(x = compare, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 
-ggplot(df, aes(x = ingest, y = changedview)) +
+ggplot(df, aes(x = QMark, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
@@ -92,40 +87,51 @@ ggplot(df, aes(x = ingest, y = changedview)) +
 Now let's run a logistic regression using the above variables
 
 ```{r}
-logit_view1 <- glm(changedview ~ ingest, family = binomial,
+logit_view1 <- glm(changedview ~ compare, family = binomial,
                    data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ ingest + Sixltr, 
+logit_view2 <- glm(changedview ~ compare + QMark, 
                    family = binomial,
                    data = df)
 summary(logit_view2)
 
-logit_view4 <- glm(changedview ~ Sixltr + work + WPS + cause + compare + ingest, 
+logit_view4 <- glm(changedview ~ compare + affiliation + QMark + leisure + certain, 
                    family=binomial,
                    data = df)
 
 summary(logit_view4)
 ```
 
+
+
+
+
 Use this section to compare models to decide which vars to use
 
 ```{r}
 
-glm1 <- glm(changedview ~ Sixltr + work + WPS + cause + compare +
-              ingest, 
+glm1 <- glm(changedview ~ compare + affiliation +
+              QMark + leisure + certain, 
             family = binomial, 
             data = df)
-summary(glm1)
+#summary(glm1)
 
-glm2 <- glm(changedview ~ Sixltr + work + WPS + cause + compare + 
-              ingest + friend,
+glm2 <- glm(changedview ~ compare + affiliation + 
+              QMark + leisure + certain + auxverb,
             family = binomial,
             data = df)
 #summary(logit_view2)
 
 lrtest(glm1, glm2)
 ```
+
+
+
+
+
+
+
 
 
 
@@ -139,7 +145,7 @@ lrtest(logit_view1, logit_view4)
 
 
 ```{r}
-ggplot(df, aes(x=Sixltr, y= changedview)) + 
+ggplot(df, aes(x=compare, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
@@ -150,7 +156,7 @@ Just playing around a bit:
 
 ```{r}
 set.seed(222)
-test_obs              <- round(0.06 * nrow(df))
+test_obs              <- round(0.03 * nrow(df))
 train_obs             <- nrow(df) - test_obs
 test_train_vec        <- c(rep("test", test_obs),
                            rep("train", train_obs))
@@ -161,7 +167,7 @@ train_data            <- df[which(test_train_vec == "train"),]
 train_data <- train_data %>% select(-c(text, area))
 
 # create the model
-glm_model      <- glm(changedview ~ Sixltr + work + WPS + cause + compare + ingest,
+glm_model      <- glm(changedview ~  compare + affiliation + QMark + leisure + certain,
                      family = binomial,
                      data = train_data)
 
@@ -219,11 +225,39 @@ summary(carseats_tree)
 ```
 
 
-
-
-
+Pruning:
 
 ```{r}
+set.seed(20)
+cv_carseats_tree  <- cv.tree(carseats_tree, FUN=prune.misclass)
+names(cv_carseats_tree)
+cv_carseats_tree
+
+## Size tells us the number of terminal nodes on each
+## of the trees considered; dev gives us the CV errors;
+## k gives us the cost-complexity parameter.
+## We can plot the error as a function of size and k
+
+par(mfrow =c(1,2))
+
+plot(cv_carseats_tree$size ,cv_carseats_tree$dev ,type="b")
+plot(cv_carseats_tree$k ,cv_carseats_tree$dev ,type="b")
+
+opt_indx          <- which.min(cv_carseats_tree$dev)
+opt_size          <- cv_carseats_tree$size[opt_indx]
+
+print(opt_size)
+
+## Now we can prune the tree using prune.misclass()
+
+pruned_carseats_tree  <- prune.misclass(carseats_tree,
+                                        best = opt_size)
+plot(pruned_carseats_tree)
+text(pruned_carseats_tree, pretty = 0)
+
+error_rate_func(predict(pruned_carseats_tree, carseat_data[test, ], 
+                        type = "class")
+                , carseat_data[test,"high_sales"])
 ```
 
 
