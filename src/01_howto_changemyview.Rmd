@@ -54,7 +54,7 @@ df$changedview <- as.numeric(df$changedview)
 Let's select only relevant vars and see their correlation coefficient
 ```{r}
 mini_df <- df %>%
-  select(-c(area, text, WC))
+  select(-c(area, text, post))
 
 corr_df <- mini_df %>% correlate() %>% focus(changedview) 
 
@@ -75,7 +75,7 @@ certain (is close)
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
-ggplot(df, aes(x = compare, y = changedview)) +
+ggplot(df, aes(x = WC, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
@@ -89,11 +89,11 @@ ggplot(df, aes(x = QMark, y = changedview)) +
 Now let's run a logistic regression using the above variables
 
 ```{r}
-logit_view1 <- glm(changedview ~ compare, family = binomial,
+logit_view1 <- glm(changedview ~ WC, family = binomial,
                    data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ compare + QMark, 
+logit_view2 <- glm(changedview ~ WC + QMark, 
                    family = binomial,
                    data = df)
 summary(logit_view2)
@@ -113,14 +113,14 @@ Use this section to compare models to decide which vars to use
 
 ```{r}
 
-glm1 <- glm(changedview ~ compare + affiliation +
-              QMark + leisure + certain, 
+glm1 <- glm(changedview ~ WC + we + compare + work + negate +
+              QMark + certain + ppron, 
             family = binomial, 
             data = df)
 #summary(glm1)
 
-glm2 <- glm(changedview ~ compare + affiliation + 
-              QMark + leisure + certain + auxverb,
+glm2 <- glm(changedview ~ WC + we + compare + work + negate + 
+              QMark + certain + ppron + discrep,
             family = binomial,
             data = df)
 #summary(logit_view2)
@@ -147,14 +147,15 @@ lrtest(logit_view1, logit_view4)
 
 
 ```{r}
-ggplot(df, aes(x=compare, y= changedview)) + 
+ggplot(df, aes(x=WC, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
 ```
 
 
-Creating a GLm from training data and testing it:
+Note: Don't use this one. 
+Creating a GLM from training data (not crossvaldiated) and testing it:
 
 ```{r}
 set.seed(333)
@@ -185,13 +186,60 @@ print(logistic_accuracy)
 ```
 Accuracy^
 
+Note: Don't use this one. 
+Now trying that crossvalidated and using all columns:
+
+```{r}
+library(caret)
+# define training control
+train_control <- trainControl(method = "cv", number = 10)
+df_g$changedview <- as.factor(df_g$changedview)
+#df_g <- df_g %>% select(-post)
+# train the model on training set
+model <- train(changedview ~ .,
+               data = df_g,
+               trControl = train_control,
+               method = "glm",
+               family=binomial())
+
+# print cv scores
+print("MODEL SUMMARY")
+summary(model)
+print("MODEL ACCURACY")
+#print(model$MAE)
+print(model)
+```
+
+CV'd accuracy here for the entire df is 51.07%.
+
+NOTE: USE THIS MODEL BELOW FOR YOUR WORK:
+Now do crossvalidation and only use select columns. 
+
+```{r}
+# train the model on training set
+set.seed(222)
+model <- train(changedview ~ WC + we + compare + work + negate + QMark + certain + ppron,
+               data = df_g,
+               trControl = train_control,
+               method = "glm",
+               family=binomial())
+
+# print cv scores
+print("MODEL SUMMARY")
+summary(model)
+print("MODEL ACCURACY")
+#print(model$MAE)
+print(model)
+```
+
+With an accuracy of 60.91%, this is the best model to use.
 
 ## LASSO Logistic Regression
 
 Creating a LASSO logistic regression and testing it
 
 ```{r}
-df_g <- df %>% select(-c(text, area))
+df_g <- df %>% select(-c(text, area, post))
 #head(df_g)
 set.seed(333)
 test_obs              <- round(0.03 * nrow(df_g))
@@ -203,37 +251,40 @@ test_train_vec        <- sample(test_train_vec, nrow(df_g), replace = FALSE)
 test_data             <- df_g[which(test_train_vec == "test"),]
 train_data            <- df_g[which(test_train_vec == "train"),]
 #train_data <- train_data %>% select(-c(text, area))
-train_data_x <- train_data[ , -1]
+train_data_x <- df_g[ , -1]
 train_data_x <- as.matrix(sapply(train_data_x, as.numeric))
-train_data_y <- train_data[ , 1]
+train_data_y <- df_g[ , 1]
 train_data_y <- as.matrix(sapply(train_data_y, as.numeric))
 
 
 # create the model
-glmmod <- glmnet(train_data_x, train_data_y, alpha=1, family="binomial")
+glmmod <- cv.glmnet(train_data_x, train_data_y, alpha=1, 
+                    nfolds = 10,
+                    family="binomial",
+                    type.measure = 'class')
 summary(glmmod)
 print("END OF MODEL SUMMARY")
 
 test_data_x <- test_data[ , -1]
 test_data_x <- as.matrix(sapply(test_data_x, as.numeric))
 test_data_y <- test_data[ , 1]
-#print(ncol(test_data_y))
+
 
 # make the predictions
-logistic_predict      <- predict(glmmod,
-                                 test_data_x,
-                                 type = "response")
-
+#logistic_predict      <- predict(glmmod,
+#                                 test_data_x,
+#                                 type = "response")
 # show the results
-class_predictions     <- as.numeric(logistic_predict > 0.5)
-logistic_accuracy     <- mean(class_predictions == test_data$changedview)
+#class_predictions     <- as.numeric(logistic_predict > 0.5)
+#logistic_accuracy     <- mean(class_predictions == test_data$changedview)
+#print(logistic_accuracy)
+
 # let's take a look at the accuracy of this model
 print("MODEL ACCURACY")
-print(logistic_accuracy)
+print(round(100 * mean(glmmod$cvm), 3))
 ```
 
-With accuracy of 39.66%, this doesn't look like a very accurate model, I'm not going to pursue it further.
-(NOTE: when I used seed=222, I got accuracy of 57.32% Maybe check again once I have more data.)
+With accuracy of 48.79%, this doesn't look like a very accurate model, I'm not going to pursue it further.
 
 
 ## RANDOM FORESTS
@@ -242,7 +293,7 @@ Playing around with random forests
 ```{r}
 set.seed(222)
 high_sales          <- as.factor(df$changedview)
-carseat_data        <- data.frame(df, high_sales)
+carseat_data        <- data.frame(df_g, high_sales)
 carseat_data = carseat_data[, -1]
 train               <- sample(seq(nrow(carseat_data)),
                               round(nrow(carseat_data) * 0.85))
@@ -303,7 +354,7 @@ pruned_carseats_tree  <- prune.misclass(carseats_tree,
                                         best = opt_size)
 plot(pruned_carseats_tree)
 text(pruned_carseats_tree, pretty = 0)
-
+print("ERROR RATE FUNCTION")
 error_rate_func(predict(pruned_carseats_tree, carseat_data[test, ], 
                         type = "class")
                 , carseat_data[test,"high_sales"])
