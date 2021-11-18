@@ -42,6 +42,7 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 df <- read_excel(df_file_path)
 
 View(head(df, 30))
+dim(df)
 #head(df)
 ```
 
@@ -75,7 +76,7 @@ certain (is close)
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
-ggplot(df, aes(x = WC, y = changedview)) +
+ggplot(df, aes(x = work, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
@@ -87,13 +88,13 @@ ggplot(df, aes(x = QMark, y = changedview)) +
 ```
 
 Now let's run a logistic regression using the above variables
-
+NOTE: this block isn't so useful anymore. 
 ```{r}
-logit_view1 <- glm(changedview ~ WC, family = binomial,
+logit_view1 <- glm(changedview ~ work, family = binomial,
                    data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ WC + QMark, 
+logit_view2 <- glm(changedview ~ work + QMark, 
                    family = binomial,
                    data = df)
 summary(logit_view2)
@@ -113,14 +114,14 @@ Use this section to compare models to decide which vars to use
 
 ```{r}
 
-glm1 <- glm(changedview ~ WC + we + compare + work + negate +
-              QMark + certain + ppron, 
+glm1 <- glm(changedview ~ work + WC + WPS + compare + negate + 
+              QMark + certain, 
             family = binomial, 
             data = df)
 #summary(glm1)
 
-glm2 <- glm(changedview ~ WC + we + compare + work + negate + 
-              QMark + certain + ppron + discrep,
+glm2 <- glm(changedview ~ work + WC + WPS + compare + negate + 
+              QMark + certain + interrog,
             family = binomial,
             data = df)
 #summary(logit_view2)
@@ -147,7 +148,7 @@ lrtest(logit_view1, logit_view4)
 
 
 ```{r}
-ggplot(df, aes(x=WC, y= changedview)) + 
+ggplot(df, aes(x=work, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
@@ -210,7 +211,7 @@ print("MODEL ACCURACY")
 print(model)
 ```
 
-CV'd accuracy here for the entire df is 51.07%.
+CV'd accuracy here for the entire df is 54.13%.
 
 NOTE: USE THIS MODEL BELOW FOR YOUR WORK:
 Now do crossvalidation and only use select columns. 
@@ -218,7 +219,11 @@ Now do crossvalidation and only use select columns.
 ```{r}
 # train the model on training set
 set.seed(222)
-model <- train(changedview ~ WC + we + compare + work + negate + QMark + certain + ppron,
+library(caret)
+# define training control
+train_control <- trainControl(method = "cv", number = 10)
+df_g$changedview <- as.factor(df_g$changedview)
+model <- train(changedview ~ work + WC + WPS + compare + negate + QMark + certain,
                data = df_g,
                trControl = train_control,
                method = "glm",
@@ -232,7 +237,7 @@ print("MODEL ACCURACY")
 print(model)
 ```
 
-With an accuracy of 60.91%, this is the best model to use.
+With an accuracy of 62.58%, this is the best model to use.
 
 ## LASSO Logistic Regression
 
