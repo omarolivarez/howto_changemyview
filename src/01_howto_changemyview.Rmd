@@ -94,16 +94,6 @@ logit_view1 <- glm(changedview ~ work, family = binomial,
                    data = df)
 summary(logit_view1)
 
-logit_view2 <- glm(changedview ~ work + QMark, 
-                   family = binomial,
-                   data = df)
-summary(logit_view2)
-
-logit_view4 <- glm(changedview ~ compare + affiliation + QMark + leisure + certain, 
-                   family=binomial,
-                   data = df)
-
-summary(logit_view4)
 ```
 
 
@@ -133,26 +123,41 @@ lrtest(glm1, glm2)
 
 
 
-
-
-
-
-
-Let's run a likelihood ratio test on model3 vs model1
-```{r}
-lrtest(logit_view1, logit_view4)
-
-```
-
-
-
-
 ```{r}
 ggplot(df, aes(x=work, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
 ```
+
+
+CV'd accuracy here for the entire df is 54.13%.
+
+NOTE: USE THIS MODEL BELOW FOR YOUR WORK:
+Now do crossvalidation and only use select columns. 
+
+```{r}
+# train the model on training set
+set.seed(222)
+library(caret)
+# define training control
+train_control <- trainControl(method = "cv", number = 10)
+df_g$changedview <- as.factor(df_g$changedview)
+model <- train(changedview ~ work + WC + WPS + compare + negate + QMark + certain,
+               data = df_g,
+               trControl = train_control,
+               method = "glm",
+               family=binomial())
+
+# print cv scores
+print("MODEL SUMMARY")
+summary(model)
+print("MODEL ACCURACY")
+#print(model$MAE)
+print(model)
+```
+
+With an accuracy of 62.58%, this is the best model to use.
 
 
 Note: Don't use this one. 
@@ -210,34 +215,6 @@ print("MODEL ACCURACY")
 #print(model$MAE)
 print(model)
 ```
-
-CV'd accuracy here for the entire df is 54.13%.
-
-NOTE: USE THIS MODEL BELOW FOR YOUR WORK:
-Now do crossvalidation and only use select columns. 
-
-```{r}
-# train the model on training set
-set.seed(222)
-library(caret)
-# define training control
-train_control <- trainControl(method = "cv", number = 10)
-df_g$changedview <- as.factor(df_g$changedview)
-model <- train(changedview ~ work + WC + WPS + compare + negate + QMark + certain,
-               data = df_g,
-               trControl = train_control,
-               method = "glm",
-               family=binomial())
-
-# print cv scores
-print("MODEL SUMMARY")
-summary(model)
-print("MODEL ACCURACY")
-#print(model$MAE)
-print(model)
-```
-
-With an accuracy of 62.58%, this is the best model to use.
 
 ## LASSO Logistic Regression
 
