@@ -56,11 +56,21 @@ Let's select only relevant vars and see their correlation coefficient
 ```{r}
 mini_df <- df %>%
   select(-c(area, text, post))
+mini_df <- mini_df %>% mutate_if(is.character,as.numeric)
 
-corr_df <- mini_df %>% correlate() %>% focus(changedview) 
+#mini_df = lapply(mini_df,as.numeric)
+mini_df <- as.data.frame(mini_df)
+#str(mini_df)
 
-corr_df <- corr_df %>% 
-  arrange(desc(corr_df$changedview))
+#corr_df <- mini_df %>% correlate() %>% focus(mini_df$changedview) 
+#corr_df <- corr_df %>% 
+#  arrange(desc(corr_df$changedview))
+#View(corr_df)
+
+small <- cor(mini_df[-1], mini_df$changedview)
+small <- as.data.frame(small)
+corr_df <- small %>% 
+  arrange(desc(small$V1))
 View(corr_df)
 ```
 
@@ -76,12 +86,12 @@ certain (is close)
 ## More robust analyses
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
-ggplot(df, aes(x = work, y = changedview)) +
+ggplot(mini_df, aes(x = WC_c, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 
-ggplot(df, aes(x = QMark, y = changedview)) +
+ggplot(mini_df, aes(x = Qmark_c, y = changedview)) +
   geom_point(alpha=.5) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
@@ -104,27 +114,68 @@ Use this section to compare models to decide which vars to use
 
 ```{r}
 
-glm1 <- glm(changedview ~ work + WC + WPS + compare + negate + 
-              QMark + certain, 
+glm1 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c +
+              Qmark_c + home + Tone + certain_c, 
             family = binomial, 
-            data = df)
+            data = mini_df)
 #summary(glm1)
 
-glm2 <- glm(changedview ~ work + WC + WPS + compare + negate + 
-              QMark + certain + interrog,
+glm2 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + 
+              Qmark_c + home + Tone + certain_c,
             family = binomial,
-            data = df)
+            data = mini_df)
 #summary(logit_view2)
 
 lrtest(glm1, glm2)
 ```
 
+Experimentation with simpler table
+```{r}
+sh_df <- mini_df %>% select(changedview:OtherP_c)
+sh_df$changedview <- as.numeric(sh_df$changedview)
 
+#small <- cor(sh_df[-1], sh_df$changedview)
+#small <- as.data.frame(small)
+#corr_df <- small %>% 
+#  arrange(desc(small$V1))
+#View(corr_df)
+
+# gm1 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c +
+#              Qmark_c + certain_c + reward_c, 
+#             family = binomial, 
+#             data = mini_df)
+# #summary(glm1)
+# 
+# gm2 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + 
+#              Qmark_c + certain_c + reward_c + Tone_c,
+#             family = binomial,
+#             data = mini_df)
+# #summary(logit_view2)
+# 
+# lrtest(gm1, gm2)
+
+train_control <- trainControl(method = "cv", number = 10)
+sh_df$changedview <- as.factor(sh_df$changedview)
+model_2 <- train(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c, 
+               data = sh_df,
+               trControl = train_control,
+               method = "glm",
+               family=binomial())
+
+# print cv scores
+print("MODEL SUMMARY")
+summary(model_2)
+print("MODEL ACCURACY")
+#print(model$MAE)
+print(model_2)
+```
+64.32% accuracy.
+Experimentation ends
 
 
 
 ```{r}
-ggplot(df, aes(x=work, y= changedview)) + 
+ggplot(mini_df, aes(x=WC_c, y= changedview)) + 
   geom_point(alpha=.5) +
   stat_smooth(method="glm", fullrange=TRUE, 
               method.args = list(family=binomial)) 
@@ -142,9 +193,9 @@ set.seed(222)
 library(caret)
 # define training control
 train_control <- trainControl(method = "cv", number = 10)
-df_g$changedview <- as.factor(df_g$changedview)
-model <- train(changedview ~ work + WC + WPS + compare + negate + QMark + certain,
-               data = df_g,
+mini_df$changedview <- as.factor(mini_df$changedview)
+model <- train(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + home + Tone + certain_c, # WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + home + Tone + certain_c
+               data = mini_df,
                trControl = train_control,
                method = "glm",
                family=binomial())
@@ -157,7 +208,7 @@ print("MODEL ACCURACY")
 print(model)
 ```
 
-With an accuracy of 62.58%, this is the best model to use.
+With an accuracy of 65.65%, this is the best model to use.
 
 
 Note: Don't use this one. 
@@ -199,11 +250,11 @@ Now trying that crossvalidated and using all columns:
 library(caret)
 # define training control
 train_control <- trainControl(method = "cv", number = 10)
-df_g$changedview <- as.factor(df_g$changedview)
+mini_df$changedview <- as.factor(mini_df$changedview)
 #df_g <- df_g %>% select(-post)
 # train the model on training set
 model <- train(changedview ~ .,
-               data = df_g,
+               data = mini_df,
                trControl = train_control,
                method = "glm",
                family=binomial())
@@ -221,7 +272,8 @@ print(model)
 Creating a LASSO logistic regression and testing it
 
 ```{r}
-df_g <- df %>% select(-c(text, area, post))
+#df_g <- df %>% select(-c(text, area, post))
+df_g <- mini_df
 #head(df_g)
 set.seed(333)
 test_obs              <- round(0.03 * nrow(df_g))
@@ -266,7 +318,7 @@ print("MODEL ACCURACY")
 print(round(100 * mean(glmmod$cvm), 3))
 ```
 
-With accuracy of 48.79%, this doesn't look like a very accurate model, I'm not going to pursue it further.
+With accuracy of 37.645%, this doesn't look like a very accurate model, I'm not going to pursue it further.
 
 
 ## RANDOM FORESTS
@@ -274,7 +326,7 @@ With accuracy of 48.79%, this doesn't look like a very accurate model, I'm not g
 Playing around with random forests
 ```{r}
 set.seed(222)
-high_sales          <- as.factor(df$changedview)
+high_sales          <- as.factor(df_g$changedview)
 carseat_data        <- data.frame(df_g, high_sales)
 carseat_data = carseat_data[, -1]
 train               <- sample(seq(nrow(carseat_data)),
@@ -306,6 +358,7 @@ print("~")
 summary(carseats_tree)
 ```
 
+Misclassification error rate: 16.34%. Accuracy is: 83.66% (?)
 
 Pruning:
 
@@ -342,7 +395,7 @@ error_rate_func(predict(pruned_carseats_tree, carseat_data[test, ],
                 , carseat_data[test,"high_sales"])
 ```
 
-
+Error rate function: 36.49%
 
 
 
