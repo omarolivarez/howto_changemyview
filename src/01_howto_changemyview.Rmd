@@ -55,7 +55,7 @@ df$changedview <- as.numeric(df$changedview)
 Let's select only relevant vars and see their correlation coefficient
 ```{r}
 mini_df <- df %>%
-  select(-c(area, text, post))
+  select(-c(area, comment, post))
 mini_df <- mini_df %>% mutate_if(is.character,as.numeric)
 
 #mini_df = lapply(mini_df,as.numeric)
@@ -130,46 +130,83 @@ lrtest(glm1, glm2)
 ```
 
 Experimentation with simpler table
+THIS IS ONE OF TH3E MODELS TO USE
 ```{r}
 sh_df <- mini_df %>% select(changedview:OtherP_c)
 sh_df$changedview <- as.numeric(sh_df$changedview)
+
+# Principal Components work:
+post_df <- mini_df %>% select(article, posemo, negemo, negate, Exclam) # Dic <- I'm going to remove Dic for now because I don't know what it means
+# I'm also removing: , swear, anger, you
+post.pca <- prcomp(post_df, center = TRUE,scale. = TRUE)
+summary(post.pca)
+sh_df_new <- cbind(sh_df,post.pca$x[,1:3]) # this adds the first component to comments df
+names(sh_df_new)[length(names(sh_df_new)) - 2]<-"PC1" 
+names(sh_df_new)[length(names(sh_df_new)) - 1]<-"PC2" 
+names(sh_df_new)[length(names(sh_df_new)) ]<-"PC3" 
+View(sh_df_new)
 
 #small <- cor(sh_df[-1], sh_df$changedview)
 #small <- as.data.frame(small)
 #corr_df <- small %>% 
 #  arrange(desc(small$V1))
 #View(corr_df)
+```
+With just 3 componets we get 87% coverage. 
+```{r}
+#sh_df_new$changedview <- as.numeric(sh_df_new$changedview)
+# NOTE: for some reason changedview had 1 added to it, now we'll subtract one and figure out what happened later. 
+#sh_df_new$changedview <- sh_df_new$changedview - 1
+#View(sh_df_new)
 
-# gm1 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c +
-#              Qmark_c + certain_c + reward_c, 
-#             family = binomial, 
-#             data = mini_df)
-# #summary(glm1)
-# 
-# gm2 <- glm(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + 
-#              Qmark_c + certain_c + reward_c + Tone_c,
-#             family = binomial,
-#             data = mini_df)
-# #summary(logit_view2)
-# 
-# lrtest(gm1, gm2)
+#gm1 <- glm(changedview ~ WC_c + WPS_c + adj_c + compare_c + work_c + negate_c +
+#             Qmark_c + certain_c + reward_c,
+#            family = binomial,
+#            data = sh_df_new)
+#summary(glm1)
+#gm2 <- glm(changedview ~ WC_c + WPS_c + adj_c + compare_c + work_c + negate_c + 
+#             Qmark_c + certain_c + reward_c + Dic_c,
+#           family = binomial,
+#            data = sh_df_new)
+#summary(logit_view2)
+#lrtest(gm1, gm2)
 
+#uncomment this at the end
 train_control <- trainControl(method = "cv", number = 10)
-sh_df$changedview <- as.factor(sh_df$changedview)
-model_2 <- train(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c, 
-               data = sh_df,
-               trControl = train_control,
-               method = "glm",
-               family=binomial())
-
-# print cv scores
+sdn <- sh_df_new
+sdn$changedview <- as.factor(sdn$changedview)
+ model_3 <- train(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c + PC1 + PC2,
+                data = sdn,
+                trControl = train_control,
+                method = "glm",
+                family=binomial())
+ 
+ # print cv scores
 print("MODEL SUMMARY")
-summary(model_2)
+summary(model_3)
 print("MODEL ACCURACY")
 #print(model$MAE)
-print(model_2)
+print(model_3)
 ```
-64.32% accuracy.
+64.32% accuracy. Vars I'm using prior to the addition of the PC: WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c
+
+Okay, I've tried interacting each coefficient with PC1 and the ones that were significant were when Qmark_c + certain_c + reward_c were interacted with PC1. The classification was lower (63%) but maybe that doesn't matter in this case of inference? Should I leave the interactions in even if they aren't statistically significant? (that's a question for Oluchi)
+
+I've tried just controlling for PC1 (by just adding it into the model.) That classification was 63%.
+
+NEXT: use PC1 as an IV for everything
+Even if it has lower accuracy, I should make sure to leave in the interaction/fixed effects/IV/whatever I choose, because that controls for things that I want to control for. 
+
+I think in the end, I'm going to go with: just adding in PC1 + PC2 + PC3. Including interactions would mean: "I assume that the agreeableness of the post affects how someone would respond to it (I think). And instead, I want to say, ONCE I CONTROL for someone's agreeableness, what are the LIWC vars that would change people's minds. I HAVE TRIED THIS OUT, NEXT STEPS IS: add in PC1:PC3 into the model first, then do the lrtest on all the vars again to see if they change once we control for these 3 components. 
+Updates:
+These vars WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c  + reward_c + PC1 have accuracy of 64.65%. 
+
+Most recent model: article + posemo + negemo + Exclam + negate + WC_c + WPS_c + adj_c + work_c + negate_c  +
+                   Qmark_c + certain_c + reward_c
+Which has 64.10% accuracy
+
+Now this model: WC_c + WPS_c + adj_c + compare_c + work_c + negate_c + Qmark_c + certain_c + reward_c + PC1 + PC2
+Has 66.25291% accuracy. 
 Experimentation ends
 
 
@@ -227,19 +264,20 @@ train_data            <- df[which(test_train_vec == "train"),]
 train_data <- train_data %>% select(-c(text, area))
 
 # create the model
-glm_model      <- glm(changedview ~  compare + affiliation + QMark + leisure + certain,
+glm_model      <- glm(changedview ~  PC1 + PC2 + PC1*Qmark_c + WC_c + WPS_c + adj_c + work_c + negate_c  + Qmark_c + certain_c + reward_c,
                      family = binomial,
-                     data = train_data)
+                     data = sdn)
 
 # make the predictions
-logistic_predict      <- predict(glm_model,
-                                 test_data,
-                                 type = "response")
-
-# show the results
-class_predictions     <- as.numeric(logistic_predict > 0.5)
-logistic_accuracy     <- mean(class_predictions == test_data$changedview)
-print(logistic_accuracy)
+# logistic_predict      <- predict(glm_model,
+#                                  test_data,
+#                                  type = "response")
+# 
+# # show the results
+# class_predictions     <- as.numeric(logistic_predict > 0.5)
+# logistic_accuracy     <- mean(class_predictions == test_data$changedview)
+# print(logistic_accuracy)
+summary(glm_model)
 ```
 Accuracy^
 
@@ -249,12 +287,12 @@ Now trying that crossvalidated and using all columns:
 ```{r}
 library(caret)
 # define training control
-train_control <- trainControl(method = "cv", number = 10)
-mini_df$changedview <- as.factor(mini_df$changedview)
+#train_control <- trainControl(method = "cv", number = 10)
+#mini_df$changedview <- as.factor(mini_df$changedview)
 #df_g <- df_g %>% select(-post)
 # train the model on training set
 model <- train(changedview ~ .,
-               data = mini_df,
+               data = sdn,
                trControl = train_control,
                method = "glm",
                family=binomial())
@@ -266,14 +304,14 @@ print("MODEL ACCURACY")
 #print(model$MAE)
 print(model)
 ```
-
+When controlling for the PCs, accuracy is 58.31%. 
 ## LASSO Logistic Regression
 
 Creating a LASSO logistic regression and testing it
 
 ```{r}
 #df_g <- df %>% select(-c(text, area, post))
-df_g <- mini_df
+df_g <- sdn
 #head(df_g)
 set.seed(333)
 test_obs              <- round(0.03 * nrow(df_g))
