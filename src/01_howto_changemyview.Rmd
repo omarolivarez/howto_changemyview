@@ -28,6 +28,7 @@ library(corrr) # to focus correlation specifically on changedview
 library(lmtest) # for likelihood test for glm
 library(tree)
 library(glmnet)
+library(caret)
 #library(randomForest)
 #library (gbm)
 ```
@@ -54,22 +55,22 @@ df$changedview <- as.numeric(df$changedview)
 
 Let's select only relevant vars and see their correlation coefficient
 ```{r}
-mini_df <- df %>%
-  select(-c(area, comment, post))
+mini_df <- df %>% select(changedview:OtherP_c) %>%
+  select(-c(area, text, author_text, post, author_post))
 mini_df <- mini_df %>% mutate_if(is.character,as.numeric)
 
 #mini_df = lapply(mini_df,as.numeric)
 mini_df <- as.data.frame(mini_df)
 #str(mini_df)
-
-#corr_df <- mini_df %>% correlate() %>% focus(mini_df$changedview) 
-#corr_df <- corr_df %>% 
+print(sum(is.na(mini_df$changedview)))
+# corr_df <- mini_df %>% correlate() %>% focus(mini_df$changedview)
+# corr_df <- corr_df %>%
 #  arrange(desc(corr_df$changedview))
-#View(corr_df)
+# View(corr_df)
 
 small <- cor(mini_df[-1], mini_df$changedview)
 small <- as.data.frame(small)
-corr_df <- small %>% 
+corr_df <- small %>%
   arrange(desc(small$V1))
 View(corr_df)
 ```
@@ -87,12 +88,12 @@ certain (is close)
 Let's visualize the distribution of the two variables at the extremes
 ```{r}
 ggplot(mini_df, aes(x = WC_c, y = changedview)) +
-  geom_point(alpha=.5) + 
+  geom_point(alpha=.05) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 
-ggplot(mini_df, aes(x = Qmark_c, y = changedview)) +
-  geom_point(alpha=.5) + 
+ggplot(mini_df, aes(x = QMark_c, y = changedview)) +
+  geom_point(alpha=.05) + 
   theme(panel.background = element_rect(fill = "white", colour= "black")) +
   theme(panel.grid.major = element_line(linetype = "dashed", color = "gray"))
 ```
@@ -131,13 +132,14 @@ lrtest(glm1, glm2)
 
 Experimentation with simpler table
 THIS IS ONE OF TH3E MODELS TO USE
+NOTE:E TRY A LINEAR PROBABILITY MODEL LATER
 ```{r}
-sh_df <- mini_df %>% select(changedview:OtherP_c)
+sh_df <- df %>% select(changedview:OtherP, article, posemo, negemo, Exclam, negate) 
 sh_df$changedview <- as.numeric(sh_df$changedview)
 
 # Principal Components work:
-post_df <- mini_df %>% select(article, posemo, negemo, negate, Exclam) # Dic <- I'm going to remove Dic for now because I don't know what it means
-# I'm also removing: , swear, anger, you
+post_df <- df %>% select(article, posemo, negemo, negate, Exclam) # Dic <- I'm going to remove Dic for now because I don't know what it means
+# I'm also removing: , anger, you
 post.pca <- prcomp(post_df, center = TRUE,scale. = TRUE)
 summary(post.pca)
 sh_df_new <- cbind(sh_df,post.pca$x[,1:3]) # this adds the first component to comments df
@@ -154,33 +156,38 @@ View(sh_df_new)
 ```
 With just 3 componets we get 87% coverage. 
 ```{r}
-#sh_df_new$changedview <- as.numeric(sh_df_new$changedview)
+sh_df_new$changedview <- as.numeric(sh_df_new$changedview)
+#str(sh_df_new)
 # NOTE: for some reason changedview had 1 added to it, now we'll subtract one and figure out what happened later. 
 #sh_df_new$changedview <- sh_df_new$changedview - 1
 #View(sh_df_new)
 
-#gm1 <- glm(changedview ~ WC_c + WPS_c + adj_c + compare_c + work_c + negate_c +
-#             Qmark_c + certain_c + reward_c,
+# gm1 <- glm(changedview ~ WC_c + WPS_c + Parenth_c + anx_c + SemiC_c + 
+#              QMark_c + leisure_c + informal_c + relig_c + certain_c,
 #            family = binomial,
 #            data = sh_df_new)
-#summary(glm1)
-#gm2 <- glm(changedview ~ WC_c + WPS_c + adj_c + compare_c + work_c + negate_c + 
-#             Qmark_c + certain_c + reward_c + Dic_c,
+# #summary(gm1)
+# 
+# gm2 <- glm(changedview ~ WC_c + WPS_c + Parenth_c + anx_c + SemiC_c + 
+#              QMark_c + leisure_c + informal_c + relig_c + certain_c + Tone_c,
 #           family = binomial,
 #            data = sh_df_new)
-#summary(logit_view2)
-#lrtest(gm1, gm2)
+# #summary(logit_view2)
+# lrtest(gm1, gm2)
+#nested models - check against this guidance? https://r4ds.had.co.nz/many-models.html
+
 
 #uncomment this at the end
 train_control <- trainControl(method = "cv", number = 10)
 sdn <- sh_df_new
 sdn$changedview <- as.factor(sdn$changedview)
- model_3 <- train(changedview ~ WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c + PC1 + PC2,
+ model_3 <- train(changedview ~ WC_c + WPS_c + Parenth_c + anx_c + SemiC_c + 
+             QMark_c + leisure_c + informal_c + relig_c + certain_c + PC1,
                 data = sdn,
                 trControl = train_control,
                 method = "glm",
                 family=binomial())
- 
+
  # print cv scores
 print("MODEL SUMMARY")
 summary(model_3)
@@ -188,6 +195,8 @@ print("MODEL ACCURACY")
 #print(model$MAE)
 print(model_3)
 ```
+NOTE TO SELF: MAKE APPENDIX TO COMPARE FOR ORIGINAL 5 ATTRIBUTES
+
 64.32% accuracy. Vars I'm using prior to the addition of the PC: WC_c + WPS_c + adj_c + work_c + negate_c + Qmark_c + certain_c + reward_c
 
 Okay, I've tried interacting each coefficient with PC1 and the ones that were significant were when Qmark_c + certain_c + reward_c were interacted with PC1. The classification was lower (63%) but maybe that doesn't matter in this case of inference? Should I leave the interactions in even if they aren't statistically significant? (that's a question for Oluchi)
@@ -207,6 +216,9 @@ Which has 64.10% accuracy
 
 Now this model: WC_c + WPS_c + adj_c + compare_c + work_c + negate_c + Qmark_c + certain_c + reward_c + PC1 + PC2
 Has 66.25291% accuracy. 
+
+Now this mode: WC_c + WPS_c + Parenth_c + anx_c + SemiC_c + QMark_c + leisure_c + informal_c + relig_c + certain_c + PC1
+Has 68.87% accuracy. 
 Experimentation ends
 
 
@@ -227,7 +239,7 @@ Now do crossvalidation and only use select columns.
 ```{r}
 # train the model on training set
 set.seed(222)
-library(caret)
+#library(caret)
 # define training control
 train_control <- trainControl(method = "cv", number = 10)
 mini_df$changedview <- as.factor(mini_df$changedview)
@@ -285,7 +297,7 @@ Note: Don't use this one.
 Now trying that crossvalidated and using all columns:
 
 ```{r}
-library(caret)
+#library(caret)
 # define training control
 #train_control <- trainControl(method = "cv", number = 10)
 #mini_df$changedview <- as.factor(mini_df$changedview)
@@ -354,10 +366,16 @@ test_data_y <- test_data[ , 1]
 # let's take a look at the accuracy of this model
 print("MODEL ACCURACY")
 print(round(100 * mean(glmmod$cvm), 3))
+# USE COEFPLOT TO PRINT OUT THE COEFFICIENTS
 ```
 
 With accuracy of 37.645%, this doesn't look like a very accurate model, I'm not going to pursue it further.
-
+Now let's take a look at it's coefficients:
+```{r}
+library(coefplot)
+extract.coef(glmmod)
+```
+## END OF LASSO
 
 ## RANDOM FORESTS
 
